@@ -13,8 +13,9 @@ jobs:
       - name: checkout private repo
         uses: actions/checkout@v4
         with:
-          repository: YOUR_USERNAME/YOUR_PRIVATE_REPO
+          repository: unovyatr24/mokita
           token: ${{ secrets.ACCESS_TOKEN }}
+          fetch-depth: 1
 
       - name: setup python
         uses: actions/setup-python@v5
