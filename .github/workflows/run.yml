@@ -2,32 +2,68 @@ name: monitor
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 * * * *"  # 每 10 分钟执行一次
   workflow_dispatch:
+  repository_dispatch:
+    types: [run-monitor]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: true
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: checkout private repo
+      # 1️⃣ checkout private repo（执行代码 + commit 回 private）
+      - name: Checkout private repo
         uses: actions/checkout@v4
         with:
           repository: unovyatr24/mokita
           token: ${{ secrets.TRIGGER_TOKEN }}
           fetch-depth: 1
 
-      - name: setup python
+      # 2️⃣ setup python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      - name: install deps
+      # 3️⃣ install dependencies
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: run monitor
-        run: python monitor_core.py
+      # 4️⃣ install browser for monitor (Playwright)
+      - name: Install Playwright
+        run: playwright install chromium
 
-      - name: log stats
+      # 5️⃣ run monitor_core.py 并生成日志
+      - name: Run monitor_core and save logs
+        run: |
+          TIME=$(date +"%Y%m%d_%H%M%S")
+          mkdir -p logs/$TIME
+          # monitor_core.py 输出到 log 并保留 json state
+          python monitor_core.py 2>&1 | tee logs/$TIME/$TIME.log
+          cp data/state/*.json logs/$TIME/ 2>/dev/null || true
+
+      # 6️⃣ log stats_history
+      - name: Log stats history
         run: python stats_logger.py
+
+      # 7️⃣ heartbeat
+      - name: Heartbeat
+        run: date > heartbeat.txt
+
+      # 8️⃣ commit changes back to private repo
+      - name: Commit logs to private repo
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@github.com"
+          git add logs/ heartbeat.txt data/state/
+          git commit -m "auto update monitor $TIME" || echo "no changes"
+          git push
